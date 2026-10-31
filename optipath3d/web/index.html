@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OptiPath 3D - Optical CAD & Beam Path Workstation</title>
+    <link rel="stylesheet" href="static/css/style.css">
+    <!-- Error and Log Tracker -->
+    <script>
+        window.__pageErrors = [];
+        window.__consoleLogs = [];
+        window.onerror = function(msg, url, line, col, err) {
+            window.__pageErrors.push({ msg: String(msg), url: url, line: line, col: col, err: err ? String(err.stack || err) : null });
+        };
+        const _origLog = console.log;
+        console.log = function(...args) {
+            window.__consoleLogs.push(args.map(a => String(a)).join(" "));
+            _origLog.apply(console, args);
+        };
+        const _origErr = console.error;
+        console.error = function(...args) {
+            window.__pageErrors.push({ msg: args.map(a => String(a)).join(" ") });
+            _origErr.apply(console, args);
+        };
+    </script>
+    <!-- Offline Vendored Three.js & Controls -->
+    <script src="vendor/three.min.js"></script>
+    <script src="vendor/OrbitControls.js"></script>
+    <script src="vendor/TransformControls.js"></script>
+</head>
+<body class="theme-dark">
+    <!-- Top Workstation Header -->
+    <header class="app-header">
+        <div class="brand">
+            <span class="brand-icon">🔬</span>
+            <div class="brand-title">OptiPath <span>3D</span></div>
+        </div>
+
+        <div class="header-center-tools">
+            <div class="btn-group">
+                <button id="tool-translate" class="btn-tool active" title="Translate (Move) Component">↔ Move</button>
+                <button id="tool-rotate" class="btn-tool" title="Rotate Component">↻ Rotate</button>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn-tool" data-cam-preset="iso">Iso</button>
+                <button class="btn-tool" data-cam-preset="top">Top (2D)</button>
+                <button class="btn-tool" data-cam-preset="front">Front</button>
+                <button class="btn-tool" data-cam-preset="side">Side</button>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn-tool active" data-theme-btn="dark" title="Dark Laboratory Slate">🌙 Dark</button>
+                <button class="btn-tool" data-theme-btn="dim" title="Dim Laser-Safe Amber Mode">🟠 Dim</button>
+                <button class="btn-tool" data-theme-btn="light" title="Clean Daylight CAD Mode">☀️ Light</button>
+            </div>
+
+            <label style="font-size: 11.5px; color: var(--text-secondary); display: flex; align-items: center; gap: 4px;">
+                <input type="checkbox" id="toggle-grid-snap" checked> 25mm Grid
+            </label>
+            <label style="font-size: 11.5px; color: var(--text-secondary); display: flex; align-items: center; gap: 4px;">
+                <input type="checkbox" id="toggle-ray-snap" checked> Ray Axis Snap
+            </label>
+            <label style="font-size: 11.5px; color: var(--text-secondary); display: flex; align-items: center; gap: 4px;">
+                <input type="checkbox" id="toggle-3d-labels" checked> 🏷️ 3D Labels
+            </label>
+            <button id="btn-toggle-mounts" class="btn-tool active" style="font-size: 11px; padding: 4px 8px;" title="Toggle Mechanical Mounts (Show Mounts / Optics Only)">
+                🏗️ Mounts: ON
+            </button>
+        </div>
+
+        <div class="header-right-tools">
+            <!-- Recommended Setups Preset Dropdown -->
+            <select id="preset-setup-select" class="preset-dropdown" title="Load Recommended Laboratory Setups">
+                <option value="">✨ Recommended Setups...</option>
+                <option value="raman_deck_two_mirror">🏢 Laser + Detection on 2nd Deck → 2 Mirrors → DM → Zeiss</option>
+                <option value="raman_table_two_mirror">🧰 Laser on Table (1st level) → 2 Mirrors → DM → Zeiss</option>
+                <option value="periscope_overhead_cage_raman">🗼 Cage Periscope + Overhead Arm → Zeiss Axio → Spectrometer</option>
+                <option value="periscope_retro_raman">🔬 Periscope + 90° Mirror → Zeiss Axio → Retro DM → Spectrometer</option>
+                <option value="deck2_retro_raman">📦 2nd-Level Deck + 90° Mirror → Retro DM → Spectrometer</option>
+                <option value="raman_zeiss_axio">🔬 Confocal Raman + Zeiss Axio Imager (Standard)</option>
+                <option value="zeiss_top_laser_left_cam">⚡ Zeiss Axio Imager (Top Laser + Left Camera)</option>
+                <option value="confocal_pl">🔭 Confocal PL/Raman + Olympus IX73</option>
+                <option value="4f_relay">🎯 4f Telecentric Beam Expander & Filter</option>
+            </select>
+
+            <button id="btn-open-confocal-calc" class="btn-tool btn-secondary" title="Confocal Pinhole & Wavelength Physics">🎯 Confocal Physics</button>
+            <button id="btn-open-periscope-wizard" class="btn-tool btn-secondary" title="Periscope & Cage System Builder">⚡ Periscope & Cage</button>
+            <button id="btn-open-deck-mgr" class="btn-tool btn-secondary" title="Multi-Level Decks & Elevated Breadboards">📦 Deck Manager</button>
+            <button id="btn-export-screenshot" class="btn-tool btn-secondary" title="Export High-Res Image Snapshot">📸 Snapshot</button>
+            <button id="btn-open-bom" class="btn-tool btn-primary" title="Thorlabs Bill of Materials Shopping List">📋 Thorlabs BOM</button>
+        </div>
+    </header>
+
+    <!-- Main Workspace Layout -->
+    <div class="main-layout">
+        <!-- Left: Component Catalog Library -->
+        <aside class="sidebar-left">
+            <div class="sidebar-title-bar">
+                <span class="sidebar-title">Component Catalog</span>
+            </div>
+            <div class="search-box">
+                <input type="text" id="catalog-search-input" placeholder="Search Thorlabs, Zeiss, Olympus, Andor...">
+            </div>
+            <div style="padding: 0 10px 8px 10px;">
+                <button id="btn-open-custom-optic-modal" class="btn-tool btn-secondary" style="width: 100%; justify-content: center; font-size: 11px;">
+                    ➕ Import / Custom Optic
+                </button>
+            </div>
+            <div class="catalog-scroll-area" id="catalog-accordion">
+                <!-- Dynamically populated by app.js -->
+            </div>
+        </aside>
+
+        <!-- Center: 3D Bench Viewport -->
+        <main class="center-viewport">
+            <div id="main-canvas-container"></div>
+            <div class="floating-viewport-controls">
+                <button id="btn-clear-bench" class="btn-tool btn-danger" style="font-size: 11px;">Clear Bench</button>
+                <button id="btn-export-scene" class="btn-tool btn-secondary" style="font-size: 11px;">Export 3D Layout (JSON)</button>
+            </div>
+        </main>
+
+        <!-- Right: 3D Preview Inspector & Selection Properties -->
+        <aside class="sidebar-right">
+            <!-- 3D Component Preview Box (Before Adding to Table) -->
+            <div class="preview-box-container">
+                <div class="preview-box-header">
+                    <span class="section-label">3D Component Preview</span>
+                    <span class="badge" id="preview-item-vendor">Thorlabs</span>
+                </div>
+
+                <div class="preview-canvas-wrapper">
+                    <div id="preview-canvas-container"></div>
+                    <div class="preview-overlay-tools">
+                        <button id="btn-preview-autorotate" class="btn-mini active" title="Toggle Auto-Rotate">Auto-Spin</button>
+                        <button id="btn-preview-reset-cam" class="btn-mini" title="Reset Preview Angle">Reset</button>
+                    </div>
+                </div>
+
+                <div class="preview-info">
+                    <div class="preview-title" id="preview-item-title">1in Kinematic Mirror Mount</div>
+                    <div class="preview-meta">Part: <code id="preview-item-part">KM100</code></div>
+                    <div class="preview-desc" id="preview-item-desc">Premier kinematic mount for Ø1in optics with BB1-E02 broadband dielectric mirror.</div>
+                    
+                    <table class="specs-table" id="preview-specs-table">
+                        <!-- Populated dynamically -->
+                    </table>
+
+                    <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 10px;">
+                        <button id="btn-add-preview-to-table" class="btn-add-action btn-primary">+ Add to Optical Bench</button>
+                        
+                        <!-- Add After Target Optic along Beam Path -->
+                        <div id="add-after-container" style="background: rgba(0, 210, 255, 0.06); border: 1px dashed var(--accent-cyan); border-radius: 6px; padding: 8px;">
+                            <div style="font-size: 11px; font-weight: 700; color: var(--accent-cyan); margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center;">
+                                <span>⚡ Add Along Beam Path After:</span>
+                                <select id="select-target-component" style="font-size: 11px; padding: 2px 4px; max-width: 125px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
+                                    <option value="">(Select Optic)</option>
+                                </select>
+                            </div>
+
+                            <!-- Flip Mirror Path Choice -->
+                            <div id="target-branch-options" style="display: none; font-size: 10.5px; color: var(--text-secondary); margin: 6px 0; padding: 4px; background: rgba(0,0,0,0.25); border-radius: 4px;">
+                                <div style="font-weight: 600; color: #ffaa00; margin-bottom: 2px;">Flip Mirror Exit Path:</div>
+                                <label style="display: flex; align-items: center; gap: 4px; margin-bottom: 2px; cursor: pointer;">
+                                    <input type="radio" name="target-branch-path" value="perpendicular" checked> ⚡ 90° Reflected (Perpendicular)
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                                    <input type="radio" name="target-branch-path" value="straight"> ➡️ Straight Horizontal (Bypassed)
+                                </label>
+                            </div>
+
+                            <div style="display: flex; gap: 4px; align-items: center; margin-top: 4px;">
+                                <span style="font-size: 10px; color: var(--text-muted); white-space: nowrap;">Distance:</span>
+                                <input type="number" id="input-after-distance" value="125" step="25" style="width: 55px; font-size: 11px; padding: 2px 4px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;" title="Distance along beam vector in mm">
+                                <span style="font-size: 10px; color: var(--text-muted);">mm</span>
+                                <button id="btn-add-after-target" class="btn-tool btn-secondary" style="flex: 1; font-size: 11px; justify-content: center; padding: 3px 6px;">+ Add After</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Active Selection Inspector -->
+            <div class="active-inspector-section">
+                <div class="sidebar-title" style="margin-bottom: 8px;">Selection Inspector</div>
+                
+                <div id="no-selection-message" class="empty-message">
+                    Click any placed component on the optical table to adjust position, rotation, and auto-level height.
+                </div>
+
+                <div id="active-inspector-panel" style="display: none;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <span id="insp-label-badge" class="badge" style="font-size: 13px; font-weight: 800; background: var(--accent-cyan); color: #000; padding: 2px 8px;">M1</span>
+                            <input type="text" id="insp-custom-label" style="width: 75px; font-weight: 700; text-transform: uppercase; font-size: 12px; padding: 2px 6px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;" title="Edit Component Label (e.g. M1, L1, FM1)">
+                        </div>
+                        <span class="badge" id="insp-type-badge">Mirror</span>
+                    </div>
+
+                    <div style="font-weight: 700; font-size: 13px; margin-bottom: 2px;" id="insp-name">Selected Optic</div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">Part: <code id="insp-part">---</code></div>
+
+                    <!-- Component Mount Visibility Toggle -->
+                    <div class="property-row" style="margin-top: 2px; margin-bottom: 8px; padding: 4px 8px; background: var(--bg-tertiary); border-radius: 4px; display: flex; align-items: center; justify-content: space-between;">
+                        <span class="property-label" style="font-size: 11px; margin: 0;">Mount & Post:</span>
+                        <label style="font-size: 11px; color: var(--text-primary); display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0;">
+                            <input type="checkbox" id="insp-show-mount" checked>
+                            <span id="insp-mount-label">Visible</span>
+                        </label>
+                    </div>
+
+                    <!-- Mount Level (Table / Elevated Deck) -->
+                    <div class="property-row" style="margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+                        <span class="property-label" style="font-size: 11px; margin: 0;">Level:</span>
+                        <select id="insp-level-select" style="flex: 1; padding: 3px 6px; font-size: 11px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;" title="Place this component on the optical table or an elevated deck"></select>
+                    </div>
+
+                    <!-- Cube Base Insert (dichroic / beamsplitter) -->
+                    <div id="insp-cube-controls" style="display: none; margin-bottom: 10px; padding: 8px 10px; border: 1px solid #a78bfa; border-radius: 6px; background: rgba(167, 139, 250, 0.08);">
+                        <div style="font-weight: 700; font-size: 11px; color: #a78bfa; margin-bottom: 6px;">🧊 Cube Base Insert</div>
+                        <select id="insp-cube-insert" style="width: 100%; padding: 4px 6px; font-size: 11px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;"></select>
+                        <div id="insp-cube-status" style="font-size: 10.5px; color: var(--text-muted); margin-top: 6px; line-height: 1.35;"></div>
+                    </div>
+
+                    <!-- Periscope Controls (Thorlabs C4W Cage / RS99) -->
+                    <div id="insp-periscope-controls" style="display: none; margin-bottom: 10px; padding: 8px 10px; border: 1px solid var(--accent-cyan); border-radius: 6px; background: rgba(0, 210, 255, 0.08);">
+                        <div style="font-weight: 700; font-size: 11px; color: var(--accent-cyan); margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
+                            <span>🗼 Cage Periscope System</span>
+                            <span id="insp-peri-elev-badge" class="badge" style="background: rgba(0, 210, 255, 0.25); color: #00d2ff; font-size: 10px;">ΔY: 220mm</span>
+                        </div>
+                        <div class="property-row" style="margin-bottom: 6px;">
+                            <span class="property-label" style="font-size: 11px;">Elevation ΔY:</span>
+                            <div class="coord-inputs" style="display: flex; gap: 6px; align-items: center;">
+                                <input type="number" id="insp-peri-elevation" step="5" min="20" max="600" style="width: 75px;" title="Periscope elevation delta (mm)">
+                                <span style="font-size: 11px; color: var(--text-muted);">mm</span>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 4px;">
+                            <label style="font-size: 11px; color: var(--text-primary); display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0;">
+                                <input type="checkbox" id="insp-peri-overhead-arm"> Overhead 30mm Cage Arm
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Flip Mirror Controls (TRF90) -->
+                    <div id="insp-flip-mirror-controls" style="display: none; margin-bottom: 10px; padding: 8px 10px; border: 1px solid #ffaa00; border-radius: 6px; background: rgba(255, 170, 0, 0.08);">
+                        <div style="font-weight: 700; font-size: 11px; color: #ffaa00; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
+                            <span>🔄 Kinematic Flip Mount (TRF90)</span>
+                            <span id="insp-flip-state-badge" class="badge" style="background: rgba(255, 170, 0, 0.25); color: #ffcc00; font-size: 10px;">Engaged (90°)</span>
+                        </div>
+                        <div style="display: flex; gap: 6px;">
+                            <button id="btn-flip-engaged" class="btn-tool btn-primary" style="flex: 1; font-size: 10px; justify-content: center;" title="Hinge Up (90° Perpendicular Reflection)">⚡ 90° Reflected</button>
+                            <button id="btn-flip-bypassed" class="btn-tool btn-secondary" style="flex: 1; font-size: 10px; justify-content: center;" title="Hinge Down (Straight Horizontal Pass-Through)">➡️ Straight Through</button>
+                        </div>
+                    </div>
+
+                    <div class="property-row">
+                        <span class="property-label">Table Position (X, Z):</span>
+                        <div class="coord-inputs">
+                            <input type="number" id="insp-pos-x" step="5" title="X position (mm)">
+                            <input type="number" id="insp-pos-z" step="5" title="Z position (mm)">
+                        </div>
+                    </div>
+
+                    <div class="property-row">
+                        <span class="property-label">Optical Height (Y):</span>
+                        <div class="coord-inputs">
+                            <input type="number" id="insp-pos-y" step="1" title="Height Y above table (mm)">
+                        </div>
+                    </div>
+
+                    <div class="property-row">
+                        <span class="property-label">Rotation Angle (°):</span>
+                        <div class="coord-inputs">
+                            <input type="number" id="insp-rot-y" step="5" title="Rotation around Y axis">
+                        </div>
+                    </div>
+
+                    <!-- Auto-Level Height Toolbar -->
+                    <div style="margin-top: 6px;">
+                        <span class="property-label" style="font-size: 11px;">Auto-Level Height To:</span>
+                        <div class="autolevel-row">
+                            <button class="btn-autolevel" data-autolevel="beam" title="Align to Primary Laser Beam (100mm)">Beam (100mm)</button>
+                            <button class="btn-autolevel" data-autolevel="olympus_side" title="Align to Olympus IX73 Side Port (155mm)">Olympus (155mm)</button>
+                            <button class="btn-autolevel" data-autolevel="zeiss_imager" title="Align to Zeiss Axio Imager Rear Port (350mm)">Zeiss (350mm)</button>
+                        </div>
+                    </div>
+
+                    <!-- Microscope Port Routing Section -->
+                    <div id="insp-microscope-ports" style="display: none; margin-top: 10px; padding: 10px; border: 1px solid var(--accent-blue); border-radius: 6px; background: rgba(0, 112, 186, 0.08);">
+                        <div style="font-weight: 700; font-size: 11px; color: var(--accent-cyan); margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
+                            <span>🔬 Microscope Optical Ports</span>
+                            <span class="badge" style="font-size: 9px; background: rgba(0, 112, 186, 0.25);">Zeiss / Olympus</span>
+                        </div>
+                        <div class="property-row">
+                            <span class="property-label" style="font-size: 11px;">Top Port:</span>
+                            <select id="insp-top-port" style="width: 100%; padding: 4px 6px; font-size: 11px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
+                                <option value="laser_in">⚡ Laser Coupling In (Coupler Flange)</option>
+                                <option value="camera">📷 Zeiss Axiocam Color / Mono</option>
+                                <option value="open">⭕ Open Phototube (Empty)</option>
+                            </select>
+                        </div>
+                        <div class="property-row" style="margin-top: 6px;">
+                            <span class="property-label" style="font-size: 11px;">Left Side Port:</span>
+                            <select id="insp-left-port" style="width: 100%; padding: 4px 6px; font-size: 11px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
+                                <option value="camera">📷 Zeiss Axiocam Camera (Side TV)</option>
+                                <option value="spectrometer">🌈 Spectrometer / Fiber Collimator</option>
+                                <option value="closed">🔒 Closed / Dust Cap</option>
+                            </select>
+                        </div>
+                        <div class="property-row" style="margin-top: 6px;">
+                            <span class="property-label" style="font-size: 11px;">Raman/PL Retro-Path:</span>
+                            <select id="insp-retro-route" style="width: 100%; padding: 4px 6px; font-size: 11px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
+                                <option value="retro_dm">⚡ Reverse Path (90° Mirror/Peri → DM → Spectrometer)</option>
+                                <option value="side_port">📷 Direct Left Side TV Port</option>
+                                <option value="off">🔒 Disabled (Laser Injection Only)</option>
+                            </select>
+                        </div>
+                        <div style="display: flex; gap: 6px; margin-top: 8px;">
+                            <button id="btn-preset-retro-dm-spectro" class="btn-tool btn-primary" style="font-size: 10px; flex: 1; padding: 4px 2px; justify-content: center;" title="Configure full retro-reflection to DM and Spectrometer">Epi to DM & Spectrometer</button>
+                            <button id="btn-preset-top-laser-left-cam" class="btn-tool btn-secondary" style="font-size: 10px; flex: 1; padding: 4px 2px; justify-content: center;" title="Laser in from Top Port, Camera on Left Side">Top Laser + Left Cam</button>
+                            <button id="btn-preset-top-cam-left-spectro" class="btn-tool btn-secondary" style="font-size: 10px; flex: 1; padding: 4px 2px; justify-content: center;" title="Camera on Top Port, Spectrometer on Left Side">Top Cam + Left Spec</button>
+                        </div>
+                    </div>
+
+                    <!-- 4f Conjugate Lens Suggestion Box -->
+                    <div id="insp-conjugate-suggestion" class="status-box" style="display: none; background: rgba(59, 130, 246, 0.15); border-color: rgba(59, 130, 246, 0.3); color: var(--accent-cyan);">
+                    </div>
+
+                    <div class="status-box" id="insp-postmath-status">
+                        Grounding: Standard BA2 + PH50 + TR75
+                    </div>
+
+                    <button id="tool-delete" class="btn-tool btn-danger" style="width: 100%; margin-top: 10px; justify-content: center;">
+                        🗑️ Delete Selected
+                    </button>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Bottom Telemetry Status Bar -->
+    <footer class="status-bar">
+        <div class="status-left">
+            <div class="status-item">Components on Bench: <strong id="telem-component-count">0</strong></div>
+            <div class="status-item">Optical Path Length: <strong id="telem-path-length">0.0 cm</strong></div>
+            <div class="status-item">Signal Detection: <strong id="telem-detection-status"><span style="color: var(--text-muted)">Awaiting signal</span></strong></div>
+            <div class="status-item">
+                Aperture Clipping: <strong id="telem-clipping-count">0</strong>
+                <span id="clipping-warning-badge" class="badge badge-alert" style="display: none;">Clipping Warning!</span>
+            </div>
+        </div>
+        <div class="status-right">
+            <div class="status-item">Active Surface: <strong>Deck 0 (Main Table)</strong></div>
+            <div class="status-item">Hole Pitch: <strong>M6 / 25 mm</strong></div>
+        </div>
+    </footer>
+
+    <!-- Confocal Pinhole & Wavelength Physics Modal -->
+    <div class="modal-container" id="confocal-modal">
+        <div class="modal-content" style="width: 680px;">
+            <div class="modal-header">
+                <span class="modal-title">🎯 Confocal Filter & Pinhole Physics Simulator</span>
+                <button class="modal-close-btn btn-tool">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">
+                    Calculates diffraction-limited Airy unit diameters, optimal pinhole size, and lateral/axial optical sectioning based on laser wavelength and objective numerical aperture.
+                </p>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="form-group">
+                        <label>Laser Wavelength λ (nm):</label>
+                        <select id="confocal-lambda">
+                            <option value="405">405 nm (Violet)</option>
+                            <option value="488">488 nm (Cyan / Argon)</option>
+                            <option value="532" selected>532 nm (Green / Raman)</option>
+                            <option value="633">632.8 nm (Red HeNe)</option>
+                            <option value="785">785 nm (NIR Raman)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Objective Numerical Aperture (NA):</label>
+                        <select id="confocal-na">
+                            <option value="0.25">10x / 0.25 NA (Air)</option>
+                            <option value="0.50">20x / 0.50 NA (Air)</option>
+                            <option value="0.75">40x / 0.75 NA (Air)</option>
+                            <option value="0.90" selected>100x / 0.90 NA (High-NA Dry)</option>
+                            <option value="1.40">100x / 1.40 NA (Oil Immersion)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Total Magnification (M):</label>
+                        <input type="number" id="confocal-mag" value="100.0" step="10">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Microscope Tube Lens f (mm):</label>
+                        <select id="confocal-tubelens">
+                            <option value="164.5" selected>Zeiss (f = 164.5 mm)</option>
+                            <option value="180.0">Olympus (f = 180.0 mm)</option>
+                            <option value="200.0">Nikon / Thorlabs (f = 200.0 mm)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="status-box" style="margin-top: 10px;">
+                    <div style="font-weight: 700; color: var(--accent-cyan); margin-bottom: 6px;">Confocal Performance Results:</div>
+                    <table class="specs-table" id="confocal-calc-results">
+                        <!-- Populated by JS -->
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-tool btn-secondary modal-close-btn">Close</button>
+                <button id="btn-add-confocal-pinhole" class="btn-tool btn-primary">+ Add 1 AU Pinhole to Table</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Multi-Level Deck Manager Modal -->
+    <div class="modal-container" id="deck-modal">
+        <div class="modal-content" style="width: 600px;">
+            <div class="modal-header">
+                <span class="modal-title">📦 Multi-Level Deck & Breadboard Manager</span>
+                <button class="modal-close-btn btn-tool">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">
+                    Add, resize, or remove elevated bridge breadboards and overhead storage shelves on the optical table.
+                </p>
+
+                <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 8px; align-items: flex-end; margin-bottom: 14px;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>Deck Label:</label>
+                        <input type="text" id="deck-input-name" value="Elevated Bridge Breadboard">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>Width (mm):</label>
+                        <input type="number" id="deck-input-w" value="450" step="50">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>Length (mm):</label>
+                        <input type="number" id="deck-input-l" value="600" step="50">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>Elevation (mm):</label>
+                        <input type="number" id="deck-input-h" value="200" step="25">
+                    </div>
+                </div>
+
+                <button id="btn-create-deck" class="btn-tool btn-primary" style="width: 100%; justify-content: center; margin-bottom: 14px;">
+                    + Create Elevated Deck
+                </button>
+
+                <div style="font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px;">Placed Elevated Decks:</div>
+                <div id="deck-items-list" style="max-height: 200px; overflow-y: auto;">
+                    <!-- Populated by app.js -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-tool btn-secondary modal-close-btn">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Periscope & Cage Generator Modal -->
+    <div class="modal-container" id="periscope-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="modal-title">⚡ Periscope & Cage System Generator Wizard</span>
+                <button class="modal-close-btn btn-tool">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px;">
+                    Elevate and route laser beams between optical table levels, elevated decks, or commercial microscope ports.
+                </p>
+
+                <div class="form-group">
+                    <label>Periscope Mechanical Style:</label>
+                    <select id="peri-type-select">
+                        <option value="CAGE-PERISCOPE-30">Thorlabs 30mm Cage Periscope (Dual C4W Cubes + ER Rods)</option>
+                        <option value="RS99">Thorlabs RS99 Post-Mounted Periscope (Dual KM100 Mounts)</option>
+                    </select>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="form-group">
+                        <label>Input Beam Height (mm):</label>
+                        <input type="number" id="peri-in-height" value="100.0" step="5">
+                    </div>
+                    <div class="form-group">
+                        <label>Target Output Height (mm):</label>
+                        <input type="number" id="peri-out-height" value="350.0" step="5">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Output Beam Direction:</label>
+                    <select id="peri-exit-dir">
+                        <option value="forward">Straight Forward (Same direction)</option>
+                        <option value="left">90° Left Turn</option>
+                        <option value="right">90° Right Turn</option>
+                        <option value="reverse">180° Reverse Reflection</option>
+                    </select>
+                </div>
+
+                <div style="margin-bottom: 10px;">
+                    <span style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">Quick Presets for Microscopes:</span>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 4px;">
+                        <button type="button" class="btn-tool btn-secondary" id="peri-preset-zeiss-top" style="font-size: 10px; justify-content: center;">Zeiss Top Laser (500mm)</button>
+                        <button type="button" class="btn-tool btn-secondary" id="peri-preset-zeiss-rear" style="font-size: 10px; justify-content: center;">Zeiss Rear Laser (350mm)</button>
+                        <button type="button" class="btn-tool btn-secondary" id="peri-preset-olympus-side" style="font-size: 10px; justify-content: center;">Olympus Side (155mm)</button>
+                        <button type="button" class="btn-tool btn-secondary" id="peri-preset-olympus-epi" style="font-size: 10px; justify-content: center;">Olympus Epi (215mm)</button>
+                    </div>
+                </div>
+
+                <div class="status-box">
+                    💡 <strong>Standard Microscope Reference Heights:</strong><br>
+                    • Zeiss Axio Imager Top Phototube Port: <strong>500.0 mm</strong> (Overhead Laser)<br>
+                    • Zeiss Axio Imager Rear Laser Port: <strong>350.0 mm</strong><br>
+                    • Zeiss Axio Observer Side Port: <strong>160.0 mm</strong><br>
+                    • Olympus IX73 Rear Epi-Fluorescence Port: <strong>215.0 mm</strong><br>
+                    • Olympus IX73 Left/Right Side Port: <strong>155.0 mm</strong>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-tool btn-secondary modal-close-btn">Cancel</button>
+                <button id="btn-generate-periscope" class="btn-tool btn-primary">Generate & Place Periscope</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Thorlabs Bill of Materials (BOM) Modal -->
+    <div class="modal-container" id="bom-modal">
+        <div class="modal-content" style="width: 820px;">
+            <div class="modal-header">
+                <span class="modal-title">📋 Thorlabs Optical Bench Bill of Materials (BOM)</span>
+                <button class="modal-close-btn btn-tool">✕</button>
+            </div>
+            <div class="modal-body">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 13px;">
+                    <div>Distinct Items: <strong id="bom-total-items">0</strong> | Total Parts: <strong id="bom-total-count">0</strong></div>
+                    <button class="btn-tool btn-secondary" onclick="window.app.exportBOMtoCSV()">📥 Export CSV for Thorlabs Cart</button>
+                </div>
+                <div style="max-height: 420px; overflow-y: auto;">
+                    <table class="bom-table">
+                        <thead>
+                            <tr>
+                                <th>Part #</th>
+                                <th>Description</th>
+                                <th>Category</th>
+                                <th>Qty</th>
+                                <th>Vendor</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bom-table-body">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-tool btn-secondary modal-close-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Optic Import / Definition Modal -->
+    <div class="modal-container" id="custom-optic-modal">
+        <div class="modal-content" style="width: 580px;">
+            <div class="modal-header">
+                <span class="modal-title">➕ Import / Define Custom Optical Component</span>
+                <button class="modal-close-btn btn-tool">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">
+                    Define or import a new optical element to insert anywhere along the beam path (e.g. after M1, L1, or flip mirrors).
+                </p>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="form-group">
+                        <label>Component Name:</label>
+                        <input type="text" id="cust-name" value="Custom Lens Mount" placeholder="e.g. f=75mm Plano-Convex Lens">
+                    </div>
+                    <div class="form-group">
+                        <label>Part Number / ID:</label>
+                        <input type="text" id="cust-part" value="LA1608-A" placeholder="e.g. LA1608-A or KM100-FLIP">
+                    </div>
+                    <div class="form-group">
+                        <label>Component Type:</label>
+                        <select id="cust-type">
+                            <option value="lens">Lens (Focusing / Collimating)</option>
+                            <option value="mirror">Mirror (Kinematic 45° / Steering)</option>
+                            <option value="flip_mirror">Flip Mirror (90° Reflected / Straight)</option>
+                            <option value="filter_edge">Optical Filter (Edge / Notch)</option>
+                            <option value="confocal_pinhole">Spatial Filter / Pinhole</option>
+                            <option value="beamsplitter_cube">Beamsplitter / Dichroic Cube</option>
+                            <option value="iris">Iris Aperture Diaphragm</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Vendor / Manufacturer:</label>
+                        <input type="text" id="cust-vendor" value="Thorlabs" placeholder="Thorlabs, Edmund, Zeiss...">
+                    </div>
+                    <div class="form-group">
+                        <label>Clear Aperture / Diameter (mm):</label>
+                        <input type="number" id="cust-diameter" value="25.4" step="1">
+                    </div>
+                    <div class="form-group" id="cust-focal-group">
+                        <label>Focal Length f (mm):</label>
+                        <input type="number" id="cust-focal" value="75.0" step="5">
+                    </div>
+                </div>
+
+                <div class="status-box" style="margin-top: 10px;">
+                    💡 <strong>Smart Placement:</strong> Once added, this optic is automatically registered in your catalog library and will appear in the <em>Add After</em> sequence selector for continuous beam alignment.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-tool btn-secondary modal-close-btn">Cancel</button>
+                <button id="btn-save-custom-optic" class="btn-tool btn-primary">+ Register & Add to Bench</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="app-toast" class="toast">Action completed</div>
+
+    <!-- Application Scripts -->
+    <script src="static/js/catalog_data.js"></script>
+    <script src="static/js/preview_viewport.js"></script>
+    <script src="static/js/three_scene.js"></script>
+    <script src="static/js/raytracer.js"></script>
+    <script src="static/js/periscope_wizard.js"></script>
+    <script src="static/js/app.js"></script>
+</body>
+</html>

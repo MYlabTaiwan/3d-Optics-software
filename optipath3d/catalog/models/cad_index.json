@@ -1,0 +1,80 @@
+{
+  "description": "OptiPath 3D - CAD Model Asset Database (STEP, STL, GLTF, OBJ)",
+  "vendor_repositories": {
+    "Thorlabs": "https://www.thorlabs.com",
+    "Zeiss": "https://www.zeiss.com/microscopy",
+    "Olympus_Evident": "https://www.olympus-lifescience.com",
+    "Princeton_Instruments": "https://www.princetoninstruments.com",
+    "Andor": "https://andor.oxinst.com"
+  },
+  "models": {
+    "ZEISS-AXIO-IMG": {
+      "part_number": "430004-9901",
+      "name": "Zeiss Axio Imager A2m / Z2m Upright Microscope",
+      "vendor": "Zeiss",
+      "step_file": "zeiss_axio_imager_a2m.step",
+      "stl_file": "zeiss_axio_imager_a2m.stl",
+      "gltf_file": "zeiss_axio_imager_a2m.gltf",
+      "dimensions_mm": [310, 520, 460],
+      "ports": {
+        "rear_laser_port": [0, -230, 350],
+        "top_camera_port": [0, 0, 500]
+      }
+    },
+    "ZEISS-AXIO-OBS": {
+      "part_number": "491001-0000",
+      "name": "Zeiss Axio Observer Inverted Microscope",
+      "vendor": "Zeiss",
+      "step_file": "zeiss_axio_observer.step",
+      "stl_file": "zeiss_axio_observer.stl",
+      "dimensions_mm": [300, 560, 590]
+    },
+    "OLYMPUS-IX73": {
+      "part_number": "IX73P2F",
+      "name": "Olympus IX73 Inverted Research Frame",
+      "vendor": "Olympus / Evident",
+      "step_file": "olympus_ix73.step",
+      "stl_file": "olympus_ix73.stl",
+      "dimensions_mm": [320, 540, 580]
+    },
+    "PRINCETON-ISOPLANE": {
+      "part_number": "IsoPlane-SCT320",
+      "name": "Princeton Instruments IsoPlane SCT-320 Spectrograph",
+      "vendor": "Princeton Instruments",
+      "step_file": "princeton_isoplane_sct320.step",
+      "stl_file": "princeton_isoplane_sct320.stl",
+      "dimensions_mm": [380, 220, 410]
+    },
+    "ANDOR-SHAMROCK": {
+      "part_number": "SR-500i-D2",
+      "name": "Andor Shamrock 500i Spectrograph",
+      "vendor": "Andor Technology",
+      "step_file": "andor_shamrock_500i.step",
+      "stl_file": "andor_shamrock_500i.stl",
+      "dimensions_mm": [420, 240, 460]
+    },
+    "KM100": {
+      "part_number": "KM100",
+      "name": "Thorlabs 1in Kinematic Mirror Mount",
+      "vendor": "Thorlabs",
+      "step_file": "thorlabs_km100.step",
+      "stl_file": "thorlabs_km100.stl",
+      "dimensions_mm": [44.5, 50.8, 25.4],
+      "official_cad_url": "https://www.thorlabs.com/thorproduct.cfm?partnumber=KM100"
+    },
+    "CAGE-PERISCOPE-30": {
+      "part_number": "C4W-PERI",
+      "name": "Thorlabs 30mm Cage Periscope Assembly",
+      "vendor": "Thorlabs",
+      "step_file": "thorlabs_cage_periscope.step",
+      "dimensions_mm": [45, 180, 65]
+    },
+    "CONFOCAL-PINHOLE-MPH": {
+      "part_number": "MPH16",
+      "name": "Thorlabs Precision Confocal Pinhole Mount",
+      "vendor": "Thorlabs",
+      "step_file": "thorlabs_mph16.step",
+      "dimensions_mm": [55, 65, 35]
+    }
+  }
+}
